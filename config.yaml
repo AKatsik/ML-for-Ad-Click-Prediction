@@ -1,0 +1,23 @@
+data_paths:
+  data_folder: "data"
+  data_file: "MainDf.csv"
+  final_test_file: "FeaturesForTest.csv"
+
+generic_config:
+  random_state: 43
+  non_categorical_feaure: "revenue"
+  show_plots: False
+
+ml_config:
+  features_removed: ["placement", "domain", "device_model", "publisher", "revenue"]
+  test_size: 0.5
+  n_estimators: [20]
+  max_depth: [10]
+  min_samples_split: [2]
+  min_samples_leaf: [1]
+  max_features: [0.1]
+  bootstrap: [True]
+  iterations: 200
+  cv_folds: 3
+
+
