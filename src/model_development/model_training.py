@@ -1,5 +1,6 @@
 """ Classification model training """
 
+import copy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,75 +23,38 @@ class ModelTrainer:
     """
 
     def __init__(self,
-                 data: pd.DataFrame,
                  config: ConfigLoader,
-                 unseen_data) -> None:
-        self.__config = config
-        self.__data = data
-        self.__unseen_data = unseen_data
+                 processed_train_data: pd.DataFrame) -> None:
+        self.__config: ConfigLoader = config
+        self.__training_data: pd.DataFrame = processed_train_data
 
-        self.__x_train: pd.DataFrame = None
-        self.__x_test: pd.DataFrame = None
-        self.__y_train: pd.DataFrame = None
-        self.__y_test: pd.DataFrame = None
+        self.__x_train: pd.DataFrame
+        self.__x_test: pd.DataFrame
+        self.__y_train: pd.DataFrame
+        self.__y_test: pd.DataFrame
 
-        self.__remove_unused_features()
         self.__split_train_test_data()
-        self.__group_categories_by_frequency()
-        self.__group_device_type()
-        self.__encode_string_to_numeric()
+        # self.__group_categories_by_frequency()
+        # self.__group_device_type()
+        # self.__encode_string_to_numeric()
 
-        self.__class_weights: dict = self.__calculate_class_weights()
-        self.__model = self.__init_classification_model()
-        self.__random_search = self.__prepare_hyper_param_tuning()
-        self.__execute_training()
-        
-        
-        
-        self.__y_pred, self.__y_prob = self.predict(self.__x_test)
-        self.__calculate_metrics()
+        # self.__class_weights: dict = self.__calculate_class_weights()
+        # self.__model = self.__init_classification_model()
+        # self.__random_search = self.__prepare_hyper_param_tuning()
+        # self.__execute_training()
+
+        # self.__y_pred, self.__y_prob = self.predict(self.__x_test)
+        # self.__calculate_metrics()
 
     @property
-    def config(self):
+    def config(self) -> ConfigLoader:
         """ Config attribute. """
-        return self.__config
+        return copy.deepcopy(self.__config)
 
     @property
-    def data(self):
+    def training_data(self) -> pd.DataFrame:
         """ Data attribute. """
-        return self.__data
-
-    @property
-    def unseen_data(self):
-        """ Unseen data attribute. """
-        return self.__unseen_data
-
-    def __remove_unused_features(self) -> None:
-        """ 
-        Remove unused features from both data and unseen data based on the following logic:
-            The correlation analysis revealed highly correlated features.
-            Only one of these features is retained.
-            For now the feature with the more categories is removed.
-            
-            We keep the features with less categories because we assume that it provides a
-            better overview of the data and the current task works like a PoC.
-            
-            In a later phase, when we would like to improve model performance, we could try
-            to tarin models using the features with more categories (more details provided)
-            or we could also try to combine the two features to create a new one.
-        """
-
-        # Remove from data
-        self.__data.drop(
-            columns=self.__config.ml_config.features_removed,
-            inplace=True
-        )
-
-        # Remove from unseen data
-        self.__unseen_data.drop(
-            columns=self.__config.ml_config.features_removed,
-            inplace=True
-            )
+        return self.__training_data.copy()
 
     def __split_train_test_data(self):
         """ 
@@ -100,11 +64,12 @@ class ModelTrainer:
         """
 
         # Splitting features and target
-        x = self.__data.drop(columns=["event_type"])  # Features
-        y = self.__data["event_type"]  # Target
+        x: pd.DataFrame = self.__training_data.drop(columns=["event_type"])  # Features
+        y: pd.Series = self.__training_data["event_type"]  # Target
 
         x_train, x_test, y_train, y_test = train_test_split(
-            x, y,
+            x,
+            y,
             test_size=self.__config.ml_config.test_size,
             random_state=self.__config.generic_config.random_state,
             stratify=y

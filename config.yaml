@@ -7,6 +7,7 @@ generic_config:
   random_state: 43
   non_categorical_feaure: "revenue"
   show_plots: False
+  grouping_threshold: 0.8
 
 ml_config:
   features_removed: ["placement", "domain", "device_model", "publisher", "revenue"]
