@@ -5,6 +5,7 @@ The original configurations are included in the config.yaml.
 
 from dataclasses import dataclass
 import typing as t
+import copy
 from ..helper.helper import Helper
 
 
@@ -31,6 +32,7 @@ class GenericConfig:
     non_categorical_feaure: str
     random_state: int
     show_plots: bool
+    grouping_threshold: float
 
     @classmethod
     def read_config(cls: t.Type["GenericConfig"], obj: dict):
@@ -38,7 +40,8 @@ class GenericConfig:
         return cls(
             non_categorical_feaure=obj["generic_config"]["non_categorical_feaure"],
             random_state=obj["generic_config"]["random_state"],
-            show_plots=obj["generic_config"]["show_plots"]
+            show_plots=obj["generic_config"]["show_plots"],
+            grouping_threshold=obj["generic_config"]["grouping_threshold"]
         )
 
 
@@ -79,6 +82,21 @@ class ConfigLoader(object):
     def __init__(self, config_path):
         config_file = Helper.read_yaml_file(path=config_path)
 
-        self.data_paths_elements = DataLocation.read_config(obj=config_file)
-        self.generic_config = GenericConfig.read_config(obj=config_file)
-        self.ml_config = MlConfig.read_config(obj=config_file)
+        self.__data_paths_elements = DataLocation.read_config(obj=config_file)
+        self.__generic_config = GenericConfig.read_config(obj=config_file)
+        self.__ml_config = MlConfig.read_config(obj=config_file)
+
+    @property
+    def data_paths_elements(self):
+        """ Data paths """
+        return copy.deepcopy(self.__data_paths_elements)
+
+    @property
+    def generic_config(self):
+        """ Data paths """
+        return copy.deepcopy(self.__generic_config)
+
+    @property
+    def ml_config(self):
+        """ Data paths """
+        return copy.deepcopy(self.__ml_config)

@@ -1,26 +1,30 @@
-""" Data loading  into the ML pipeline from the data directory. """
+""" Loading data into the ML pipeline from the data directory. """
 
 import os
+import copy
 import pandas as pd
 from ..config.config_loading import ConfigLoader
-from ..data_preprocessing.data_exploration import DataExplorator
 
 
-class DataLoader(object):
+class DataLoader:
 
     """
-    Load data from the csv file that is defined in the config file.
+    Load training data and inference data from the csv files,
+    whose location is defined in the config file.
     """
 
     def __init__(self, config: ConfigLoader):
-        self.__config = config
-        self.__data: pd.DataFrame = pd.read_csv(
+        # Configurations
+        self.__config: ConfigLoader = config
+        # Data for training
+        self.__training_data: pd.DataFrame = pd.read_csv(
             os.path.join(
                 config.data_paths_elements.data_folder,
                 config.data_paths_elements.data_file
             )
         )
-        self.__unseen_data = pd.read_csv(
+        # Data for inference
+        self.__inference_data: pd.DataFrame = pd.read_csv(
             os.path.join(
                 config.data_paths_elements.data_folder,
                 config.data_paths_elements.final_test_file
@@ -28,19 +32,16 @@ class DataLoader(object):
         )
 
     @property
-    def config(self):
-        """ Config attribute. """
-        return self.__config
+    def config(self) -> ConfigLoader:
+        """ Configurations """
+        return copy.deepcopy(self.__config)
 
     @property
-    def data(self):
-        """ Data attribute. """
-        return self.__data
+    def training_data(self) -> pd.DataFrame:
+        """ Data for training """
+        return self.__training_data.copy()
 
-    def run_data_exploration(self) -> DataExplorator:
-        """ Run Exploratory Data Analysis. """
-        return DataExplorator(
-            data=self.__data,
-            config=self.__config,
-            unseen_data=self.__unseen_data
-        )
+    @property
+    def inference_data(self) -> pd.DataFrame:
+        """ Data for inference """
+        return self.__inference_data.copy()
