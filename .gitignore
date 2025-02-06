@@ -9,3 +9,6 @@ __pycache__/
 
 # Igmore presentation file
 *.pptx
+
+# Ignore results file
+final_results.csv

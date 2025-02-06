@@ -1,11 +1,11 @@
 """ Classification model training """
 
+import os
 import copy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.base import BaseEstimator
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
@@ -24,124 +24,60 @@ class ModelTrainer:
 
     def __init__(self,
                  config: ConfigLoader,
-                 processed_train_data: pd.DataFrame) -> None:
+                 x_train: pd.DataFrame,
+                 x_test: pd.DataFrame,
+                 y_train: pd.DataFrame,
+                 y_test: pd.DataFrame) -> None:
+
+        # --- Input parameters
         self.__config: ConfigLoader = config
-        self.__training_data: pd.DataFrame = processed_train_data
+        self.__x_train: pd.DataFrame = x_train
+        self.__x_test: pd.DataFrame = x_test
+        self.__y_train: pd.DataFrame = y_train
+        self.__y_test: pd.DataFrame = y_test
 
-        self.__x_train: pd.DataFrame
-        self.__x_test: pd.DataFrame
-        self.__y_train: pd.DataFrame
-        self.__y_test: pd.DataFrame
+        # --- Output
+        self.__best_model: BaseEstimator
+        self.__y_predictions: np.ndarray
+        self.__y_probabilities: np.ndarray
+        self.__classification_report: dict
+        self.__feat_importance: np.ndarray
 
-        self.__split_train_test_data()
-        # self.__group_categories_by_frequency()
-        # self.__group_device_type()
-        # self.__encode_string_to_numeric()
+        self.__class_weights: dict = self.__calculate_class_weights()
+        self.__model = self.__init_random_forest_model()
+        self.__random_search = self.__prepare_hyper_param_tuning()
+        self.__execute_training()
 
-        # self.__class_weights: dict = self.__calculate_class_weights()
-        # self.__model = self.__init_classification_model()
-        # self.__random_search = self.__prepare_hyper_param_tuning()
-        # self.__execute_training()
+        self.__predict()
+        self.__calculate_metrics()
 
-        # self.__y_pred, self.__y_prob = self.predict(self.__x_test)
-        # self.__calculate_metrics()
-
-    @property
-    def config(self) -> ConfigLoader:
-        """ Config attribute. """
-        return copy.deepcopy(self.__config)
+        self.__extract_feature_importance()
+        self.__plot_feature_importance()
 
     @property
-    def training_data(self) -> pd.DataFrame:
-        """ Data attribute. """
-        return self.__training_data.copy()
+    def class_weights(self) -> dict:
+        """ Class weights property. """
+        return self.__class_weights
 
-    def __split_train_test_data(self):
-        """ 
-        Split data into training and testing sets.
-        Stratify setting is activated because to make sure that the target labels 
-        are equally splitted in both sets.
-        """
+    @property
+    def best_model(self) -> BaseEstimator:
+        """ Best model property. """
+        return copy.deepcopy(self.__best_model)
 
-        # Splitting features and target
-        x: pd.DataFrame = self.__training_data.drop(columns=["event_type"])  # Features
-        y: pd.Series = self.__training_data["event_type"]  # Target
+    @property
+    def predictions(self) -> np.ndarray:
+        """ Predictions property. """
+        return copy.deepcopy(self.__y_predictions)
 
-        x_train, x_test, y_train, y_test = train_test_split(
-            x,
-            y,
-            test_size=self.__config.ml_config.test_size,
-            random_state=self.__config.generic_config.random_state,
-            stratify=y
-        )
+    @property
+    def pred_probabilities(self) -> np.ndarray:
+        """ Prediction probabilities property. """
+        return copy.deepcopy(self.__y_probabilities)
 
-        self.__x_train = x_train
-        self.__x_test = x_test
-        self.__y_train = y_train
-        self.__y_test = y_test
-
-    def __group_categories_by_frequency(self):
-        """ Group categories in categorical variables using the frequency analysis. """
-
-        # Settings for transformation:
-        # The key shows the columnn name
-        # The first element of the tuple shows the number of the most frequent values that is retained
-        settings = {
-            "browser": (3, 1),
-            "carrier": (1, 1),
-            "language": (1, 1),
-            "region": (1, 1),
-            "os_extended": (9, 1),
-            "user_hour": (14, 1)
-        }
-
-        for item, (x1, x2) in settings.items():
-            # Identify the most frequent values in the training set
-            top_values = self.__x_train[item].value_counts().nlargest(x1).index.tolist()
-
-            # Replace values in the training set not in the top 4 with "other"
-            self.__x_train[item] = self.__x_train[item].apply(lambda x: x if x in top_values else 'other')
-
-            # Apply the same transformation to the test set, keeping the same top values
-            self.__x_test[item] = self.__x_test[item].apply(lambda x: x if x in top_values else 'other')
-
-            # Apply the same transformation to the unseen data
-            self.__unseen_data[item] = self.__unseen_data[item].apply(lambda x: x if x in top_values else 'other')
-
-    def __group_device_type(self) -> None:
-        """
-        Group the "device_type" feature based on the following logic:
-            pc & other devices is the most frequent value and it is retained.
-            table and phone values are combined into mobile devices
-            The rest are grouped as tv & other
-        """
-        # Logic of groupping device type
-        def categorize_device(device):
-            if device in ['phone', 'tablet']:
-                return 'mobile devices'
-            elif device in ['pc', 'other']:
-                return device
-            else:
-                return 'tv and other'
-
-        # Apply the logic
-        self.__x_train['device_type'] = self.__x_train['device_type'].apply(categorize_device)
-        self.__x_test['device_type'] = self.__x_test['device_type'].apply(categorize_device)
-        self.__unseen_data['device_type'] = self.__unseen_data['device_type'].apply(categorize_device)
-
-    def __encode_string_to_numeric(self) -> None:
-        """ Encode string values to numeric using the model that fits only the training set. """
-        for col in self.unseen_data.columns:
-            if self.unseen_data[col].dtype == 'object':
-                label_encoder = LabelEncoder()
-                # Fit and transform the training set 
-                self.__x_train[col] = label_encoder.fit_transform(self.__x_train[col].astype(str))
-                
-                # Transform the test set
-                self.__x_test[col] = label_encoder.fit_transform(self.__x_test[col].astype(str))
-                
-                # Transform the unseen data
-                self.__unseen_data[col] = label_encoder.fit_transform(self.__unseen_data[col].astype(str))
+    @property
+    def classification_report(self) -> dict:
+        """ Classification report property. """
+        return self.__classification_report
 
     def __calculate_class_weights(self) -> dict:
         """
@@ -160,7 +96,7 @@ class ModelTrainer:
         class_weight_dict = dict(zip(unique_classes, class_weights))
         return class_weight_dict
 
-    def __init_classification_model(self):
+    def __init_random_forest_model(self):
         """ Initate classification model. """
         rf = RandomForestClassifier(
             class_weight=self.__class_weights, 
@@ -200,31 +136,64 @@ class ModelTrainer:
     def __execute_training(self):
         """ Execute the training process. """
         self.__random_search.fit(
-            self.__x_train, 
+            self.__x_train,
             self.__y_train
         )
 
-    def predict(self, test_data:pd.DataFrame):
-        """ Predict binary class click/no click and class probabilities using best model. """
-        y_pred = self.__random_search.best_estimator_.predict(test_data)
-        y_prob = self.__random_search.best_estimator_.predict_proba(test_data)[:, 1]
+    def __predict(self):
+        """ 
+        Extract best model from the random search.
+        Predict binary class click/no click and class probabilities using best model. 
+        """
+        self.__best_model: BaseEstimator = self.__random_search.best_estimator_
+        self.__y_predictions: np.ndarray = self.__best_model.predict(self.__x_test)
+        self.__y_probabilities: np.ndarray = self.__best_model.predict_proba(self.__x_test)[:, 1]
 
-        return y_pred, y_prob
+    def __extract_feature_importance(self):
+        """ Extract feature importance. """
+        self.__feat_importance = self.__best_model.feature_importances_
+
+    def __plot_feature_importance(self) -> None:
+        """ Plot feature importance. """
+        feature_importance_df = pd.DataFrame(
+            {
+                'Feature': self.__x_train.columns, 
+                'Importance': self.__feat_importance
+            }
+        ).sort_values(by='Importance', ascending=True)
+
+        # Plot feature importance as a bar chart
+        plt.figure(figsize=(8, 6))
+        plt.barh(feature_importance_df['Feature'], feature_importance_df['Importance'])
+        plt.xlabel('Feature Importance')
+        plt.ylabel('Feature')
+        plt.title('Random Forest Feature Importance')
+
+        plt.savefig(
+            os.path.join(
+                "plots", 
+                "feature_importance.png"
+            )
+        )
+
+        if self.__config.generic_config.show_plots:
+            plt.show()
+
+        plt.close()
 
     def __calculate_metrics(self):
-        report = classification_report(self.__y_test, self.__y_pred)
-        print(report)
+        self.__classification_report: dict = classification_report(self.__y_test, self.__y_predictions)
 
         # Calculate precision-recall curve
         precision, recall, thresholds = precision_recall_curve(
             self.__y_test,
-            self.__y_prob
+            self.__y_probabilities
         )
 
         # Calculate PR AUC
         pr_auc = average_precision_score(
             self.__y_test,
-            self.__y_prob
+            self.__y_probabilities
         )
 
         plt.figure(figsize=(8, 6))
@@ -234,7 +203,16 @@ class ModelTrainer:
         plt.title('Precision-Recall Curve')
         plt.legend(loc='best')
         plt.grid()
-        # plt.savefig('PR_curve.png', transparent=True)
+
+        plt.savefig(
+            os.path.join(
+                "plots", 
+                "PR_curve.png"
+            ),
+            transparent=True
+        )
 
         if self.__config.generic_config.show_plots:
             plt.show()
+
+        plt.close()
